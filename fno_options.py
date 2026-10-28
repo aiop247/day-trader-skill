@@ -71,21 +71,29 @@ FALLBACK_FNO: Dict[str, Dict[str, any]] = {
 
 
 def load_config() -> dict:
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
+    default_cfg = {
         "market": "NSE",
         "currency_symbol": "₹",
         "budget": 50000,
         "max_loss_per_trade_usd": 3000,
         "max_daily_loss_usd": 6000,
-        "telegram_token": "",
-        "telegram_chat_id": ""
+        "telegram_token": "8633439842:AAE4zntv2xMxZf_gYjbHQH5_RZCi_GRn_sQ",
+        "telegram_chat_id": "-5195328060"
     }
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                default_cfg.update(saved)
+                # Ensure telegram settings fallback to default if empty
+                if not default_cfg.get("telegram_token"):
+                    default_cfg["telegram_token"] = "8633439842:AAE4zntv2xMxZf_gYjbHQH5_RZCi_GRn_sQ"
+                if not default_cfg.get("telegram_chat_id"):
+                    default_cfg["telegram_chat_id"] = "-5195328060"
+                return default_cfg
+        except Exception:
+            pass
+    return default_cfg
 
 
 def save_config(cfg: dict) -> None:
