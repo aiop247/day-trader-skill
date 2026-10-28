@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSE Stock F&O Option Buyer Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glow-green { box-shadow: 0 0 15px rgba(34, 197, 94, 0.25); }
+        .glow-red { box-shadow: 0 0 15px rgba(239, 68, 68, 0.25); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-lg">
+                <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    NSE Stock Option Buyer
+                    <span class="text-xs font-semibold px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">FNO INTRADAY</span>
+                </h1>
+                <p class="text-xs text-slate-400">Strict 1:2 R:R • Lot-Sized Risk • Flat by 15:15 IST</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center bg-slate-800/80 rounded-lg px-3 py-1.5 border border-slate-700 text-xs">
+                <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-2"></span>
+                <span class="text-slate-300">NSE Market Hours:</span>
+                <span class="ml-1 font-semibold text-white">09:15 - 15:30 IST</span>
+            </div>
+            <button onclick="toggleSettingsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Settings & Telegram
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full flex flex-col space-y-6">
+
+        <!-- Top Section: Analyze Stock & Active Option Card -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Stock Input & Sizing Summary -->
+            <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
+                        <span>Analyze F&O Stock</span>
+                        <span id="fnoCountBadge" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">219 Stocks</span>
+                    </h2>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select / Enter Stock Symbol</label>
+                            <div class="relative">
+                                <input type="text" id="symbolInput" list="fnoStockList" placeholder="e.g. RELIANCE, SBIN, TCS" 
+                                    class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono uppercase text-sm focus:outline-none focus:border-emerald-500">
+                                <datalist id="fnoStockList"></datalist>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="calculatePlan('LONG')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow-md">
+                                <span>🟢 BUY CALL (CE)</span>
+                            </button>
+                            <button onclick="calculatePlan('SHORT')" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-semibold py-2.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow-md">
+                                <span>🔴 BUY PUT (PE)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>Click any stock below to auto-analyze</span>
+                    <span class="text-emerald-400 font-mono font-medium">1:2 R:R System</span>
+                </div>
+            </div>
+
+            <!-- Active Option Buying Setup Card -->
+            <div id="tradePlanCard" class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-center">
+                <div class="text-center py-8 text-slate-500">
+                    <svg class="w-10 h-10 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <p class="text-sm font-medium text-slate-300">Select any stock from the table below to generate an instant Option Buying plan</p>
+                    <p class="text-xs text-slate-500 mt-1">Calculates ATM Strike, SL, 1:2 Target, and Lot-sized risk in ₹</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- NEW BOTTOM SECTION: 2-Column Sector & Stock Radar Table -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+                <div class="flex items-center gap-3">
+                    <div class="bg-emerald-500/10 border border-emerald-500/30 p-1.5 rounded-lg">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <span>Sector & Stock Performance Radar</span>
+                            <span class="text-[11px] font-normal text-slate-400">• Click any Sector (Left) to view its Stocks (Right)</span>
+                        </h2>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-slate-400 hidden sm:inline">Auto-sorted: <strong class="text-emerald-400">+Green Top</strong> • <strong class="text-rose-400">-Red Bottom</strong></span>
+                    <button onclick="loadSectors()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Refresh All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Two-Column Side-by-Side Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+
+                <!-- LEFT COLUMN (5 Cols): Sectors List (Auto-sorted + to -) -->
+                <div class="md:col-span-5 p-4 flex flex-col">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-800/80 mb-2">
+                        <span>NSE Sectors (Ranked)</span>
+                        <span>Avg Change</span>
+                    </div>
+                    <div id="sectorsListContainer" class="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
+                        <div class="text-xs text-slate-500 text-center py-10">Loading ranked sectors...</div>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN (7 Cols): Sector Stocks (Auto-sorted + to -) -->
+                <div class="md:col-span-7 p-4 flex flex-col">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-800/80 mb-2">
+                        <div class="flex items-center gap-2">
+                            <span>Stocks in</span>
+                            <span id="selectedSectorBadge" class="text-emerald-400 font-bold">Banking</span>
+                        </div>
+                        <span id="sectorStocksCount" class="font-mono text-slate-400">0 stocks</span>
+                    </div>
+                    <div id="sectorStocksContainer" class="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
+                        <div class="text-xs text-slate-500 text-center py-10">Select a sector on the left to view stocks...</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Active Positions / Paper Trade Log -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <span>Active Paper Positions</span>
+                    <span id="activePositionsCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">0 Trades</span>
+                </h2>
+                <span class="text-xs text-slate-500 font-mono">Square-off: 15:15 IST</span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-800/60 text-slate-400 border-b border-slate-700/60 uppercase">
+                        <tr>
+                            <th class="p-3">Contract</th>
+                            <th class="p-3">Type</th>
+                            <th class="p-3">Qty (Lots)</th>
+                            <th class="p-3">Entry Premium</th>
+                            <th class="p-3">Stop Loss</th>
+                            <th class="p-3">Target</th>
+                            <th class="p-3">Max Risk</th>
+                            <th class="p-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsTableBody" class="divide-y divide-slate-800">
+                        <tr>
+                            <td colspan="8" class="p-6 text-center text-slate-600">No active positions open.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Settings & Telegram Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-5">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                    Settings & Telegram Alerts
+                </h3>
+                <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-medium text-slate-300 mb-1">Max Risk Per Trade (₹)</label>
+                    <input type="number" id="cfgMaxLoss" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500" placeholder="3000">
+                    <p class="text-[11px] text-slate-500 mt-1">Lots will automatically size so max loss never exceeds this value.</p>
+                </div>
+
+                <div>
+                    <label class="block font-medium text-slate-300 mb-1">Max Daily Loss Limit (₹)</label>
+                    <input type="number" id="cfgDailyLoss" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500" placeholder="6000">
+                </div>
+
+                <div class="pt-2 border-t border-slate-800">
+                    <h4 class="font-semibold text-slate-200 mb-2 flex items-center gap-1.5">
+                        <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                        Telegram Notifications
+                    </h4>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Telegram Bot Token</label>
+                            <input type="text" id="cfgTgToken" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-emerald-500" placeholder="e.g. 123456789:ABCdefGhIjkLmNoPqRsTuVwXyZ">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Telegram Chat ID</label>
+                            <input type="text" id="cfgTgChatId" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-emerald-500" placeholder="e.g. 987654321 or -100xxxxxxx">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end gap-2">
+                    <button onclick="toggleSettingsModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition">Cancel</button>
+                    <button onclick="saveSettings()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold transition">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let fnoMaster = {};
+        let currentPlan = null;
+        let positions = JSON.parse(localStorage.getItem('fno_positions') || '[]');
+
+        async function init() {
+            await loadFnoMaster();
+            await loadConfig();
+            renderPositions();
+            refreshWatchlist();
+        }
+
+        async function loadFnoMaster() {
+            try {
+                const res = await fetch('/api/fno-stocks');
+                fnoMaster = await res.json();
+                const datalist = document.getElementById('fnoStockList');
+                datalist.innerHTML = '';
+                const keys = Object.keys(fnoMaster).sort();
+                document.getElementById('fnoCountBadge').innerText = `${keys.length} Stocks`;
+                keys.forEach(k => {
+                    const opt = document.createElement('option');
+                    opt.value = k;
+                    opt.label = `${fnoMaster[k].name} (Lot: ${fnoMaster[k].lot})`;
+                    datalist.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Failed to load F&O stocks', err);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                document.getElementById('cfgMaxLoss').value = cfg.max_loss_per_trade_usd || 3000;
+                document.getElementById('cfgDailyLoss').value = cfg.max_daily_loss_usd || 6000;
+                document.getElementById('cfgTgToken').value = cfg.telegram_token || '';
+                document.getElementById('cfgTgChatId').value = cfg.telegram_chat_id || '';
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function saveSettings() {
+            const payload = {
+                max_loss_per_trade_usd: parseFloat(document.getElementById('cfgMaxLoss').value) || 3000,
+                max_daily_loss_usd: parseFloat(document.getElementById('cfgDailyLoss').value) || 6000,
+                telegram_token: document.getElementById('cfgTgToken').value.trim(),
+                telegram_chat_id: document.getElementById('cfgTgChatId').value.trim()
+            };
+            try {
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                toggleSettingsModal();
+                alert('Settings saved successfully!');
+            } catch (err) {
+                alert('Error saving settings: ' + err);
+            }
+        }
+
+        async function calculatePlan(direction) {
+            const sym = document.getElementById('symbolInput').value.trim().toUpperCase();
+            if (!sym) {
+                alert('Please select or type a stock symbol.');
+                return;
+            }
+
+            const card = document.getElementById('tradePlanCard');
+            card.innerHTML = `<div class="text-center py-12 text-slate-400">Fetching live price and computing ATM Option Plan...</div>`;
+
+            try {
+                const res = await fetch(`/api/plan-option?symbol=${encodeURIComponent(sym)}&direction=${encodeURIComponent(direction)}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed');
+                }
+                currentPlan = await res.json();
+                renderPlanCard(currentPlan);
+            } catch (err) {
+                card.innerHTML = `<div class="p-6 text-center text-rose-400 text-sm">Error: ${err.message}</div>`;
+            }
+        }
+
+        function renderPlanCard(p) {
+            const isCall = p.opt_type === 'CE';
+            const badgeColor = isCall ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+
+            const html = `
+                <div class="flex items-start justify-between border-b border-slate-800 pb-4 mb-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl font-bold text-white mono">${p.contract}</span>
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded border ${badgeColor}">${p.direction}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">${p.company} • Stock LTP: <span class="text-white font-mono">₹${p.stock_price}</span></p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-400 block">Square-off</span>
+                        <span class="text-xs font-semibold text-amber-400 mono">${p.flat_by}</span>
+                    </div>
+                </div>
+
+                <!-- Price & Levels Grid -->
+                <div class="grid grid-cols-3 gap-4 mb-5">
+                    <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/60">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wide block">Entry Premium</span>
+                        <span class="text-xl font-bold text-white mono">₹${p.est_premium}</span>
+                        <span class="text-[10px] text-slate-400 block mt-0.5">ATM Strike: ${p.strike}</span>
+                    </div>
+                    <div class="bg-rose-950/20 p-3 rounded-lg border border-rose-800/40">
+                        <span class="text-[11px] text-rose-300 uppercase tracking-wide block">Stop Loss (SL)</span>
+                        <span class="text-xl font-bold text-rose-400 mono">₹${p.sl_price}</span>
+                        <span class="text-[10px] text-rose-400 block mt-0.5">-₹${p.sl_points} (-28%)</span>
+                    </div>
+                    <div class="bg-emerald-950/20 p-3 rounded-lg border border-emerald-800/40">
+                        <span class="text-[11px] text-emerald-300 uppercase tracking-wide block">Target 1:2 (TP)</span>
+                        <span class="text-xl font-bold text-emerald-400 mono">₹${p.target_price}</span>
+                        <span class="text-[10px] text-emerald-400 block mt-0.5">+₹${p.target_points} (+56%)</span>
+                    </div>
+                </div>
+
+                <!-- Sizing & Budget Box -->
+                <div class="bg-slate-800/40 p-4 rounded-lg border border-slate-800 mb-5">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                            <span class="text-slate-400 block">NSE Lot Size</span>
+                            <span class="font-bold text-white mono">${p.lot_size} Qty</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block">Sized Quantity</span>
+                            <span class="font-bold text-emerald-400 mono">${p.lots} Lot (${p.total_qty} Qty)</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block">Total Risk (SL)</span>
+                            <span class="font-bold text-rose-400 mono">₹${p.total_risk.toLocaleString()}</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block">Target Reward (TP)</span>
+                            <span class="font-bold text-emerald-400 mono">₹${p.total_reward.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center justify-between pt-2">
+                    <button onclick="sendTelegramAlert()" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                        Send to Telegram
+                    </button>
+                    <button onclick="addPaperPosition()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                        <span>Execute Paper Trade</span>
+                    </button>
+                </div>
+            `;
+            document.getElementById('tradePlanCard').innerHTML = html;
+        }
+
+        async function sendTelegramAlert() {
+            if (!currentPlan) return;
+            try {
+                const res = await fetch('/api/send-telegram', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentPlan)
+                });
+                const r = await res.json();
+                if (r.success) {
+                    alert('Telegram notification sent!');
+                } else {
+                    alert('Failed to send Telegram: ' + r.message);
+                }
+            } catch (err) {
+                alert('Error: ' + err);
+            }
+        }
+
+        function addPaperPosition() {
+            if (!currentPlan) return;
+            positions.push({
+                ...currentPlan,
+                id: Date.now(),
+                timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
+            });
+            localStorage.setItem('fno_positions', JSON.stringify(positions));
+            renderPositions();
+            alert(`Paper trade added: ${currentPlan.contract}`);
+        }
+
+        function removePosition(id) {
+            positions = positions.filter(p => p.id !== id);
+            localStorage.setItem('fno_positions', JSON.stringify(positions));
+            renderPositions();
+        }
+
+        function renderPositions() {
+            document.getElementById('activePositionsCount').innerText = `${positions.length} Trades`;
+            const tbody = document.getElementById('positionsTableBody');
+            if (positions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-600">No active positions open.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = positions.map(p => `
+                <tr class="hover:bg-slate-800/40 transition">
+                    <td class="p-3 font-semibold text-white mono">${p.contract}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.opt_type === 'CE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.opt_type}</span>
+                    </td>
+                    <td class="p-3 text-slate-300 mono">${p.total_qty} (${p.lots}L)</td>
+                    <td class="p-3 font-semibold text-white mono">₹${p.est_premium}</td>
+                    <td class="p-3 font-semibold text-rose-400 mono">₹${p.sl_price}</td>
+                    <td class="p-3 font-semibold text-emerald-400 mono">₹${p.target_price}</td>
+                    <td class="p-3 text-slate-400 mono">₹${p.total_risk.toLocaleString()}</td>
+                    <td class="p-3 text-right">
+                        <button onclick="removePosition(${p.id})" class="text-rose-400 hover:text-rose-300 font-medium text-xs">Close</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        let currentSector = "Banking";
+
+        async function init() {
+            await loadFnoMaster();
+            await loadConfig();
+            renderPositions();
+            await loadSectors();
+        }
+
+        async function loadSectors() {
+            const container = document.getElementById('sectorsListContainer');
+            container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">Ranking sectors...</div>`;
+            try {
+                const res = await fetch('/api/sectors');
+                const sectors = await res.json();
+                
+                // If currentSector not set or not in list, pick the top performing sector
+                if (sectors.length > 0 && !sectors.some(s => s.name === currentSector)) {
+                    currentSector = sectors[0].name;
+                }
+
+                container.innerHTML = sectors.map((s, idx) => {
+                    const isSelected = s.name === currentSector;
+                    const isGreen = s.avg_change >= 0;
+                    
+                    let bgStyle = isSelected
+                        ? (isGreen ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-sm' : 'bg-rose-950/40 border-rose-500 text-white shadow-sm')
+                        : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 text-slate-300';
+                    
+                    let rankBadge = isSelected
+                        ? (isGreen ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white')
+                        : 'bg-slate-700 text-slate-300';
+
+                    return `
+                        <div onclick="selectSector('${s.name}')" class="p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between ${bgStyle}">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${rankBadge}">#${idx + 1}</span>
+                                <div>
+                                    <span class="text-xs font-bold block">${s.name}</span>
+                                    <span class="text-[10px] text-slate-400">${s.stock_count} F&O Stocks</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs font-mono font-bold ${isGreen ? 'text-emerald-400' : 'text-rose-400'}">
+                                    ${isGreen ? '▲ +' : '▼ '}${s.avg_change}%
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                document.getElementById('selectedSectorBadge').innerText = currentSector;
+                await loadSectorStocks(currentSector);
+            } catch (err) {
+                container.innerHTML = `<div class="text-xs text-rose-400 text-center py-4">Failed to load sectors</div>`;
+            }
+        }
+
+        async function selectSector(sector) {
+            currentSector = sector;
+            document.getElementById('selectedSectorBadge').innerText = sector;
+            await loadSectors(); // Re-render sector selection styling
+        }
+
+        async function loadSectorStocks(sector) {
+            const container = document.getElementById('sectorStocksContainer');
+            container.innerHTML = `<div class="text-xs text-slate-500 text-center py-10">Fetching live quotes for ${sector}...</div>`;
+            try {
+                const res = await fetch(`/api/sector-stocks?sector=${encodeURIComponent(sector)}`);
+                const stocks = await res.json();
+                document.getElementById('sectorStocksCount').innerText = `${stocks.length} stocks`;
+
+                container.innerHTML = stocks.map(item => {
+                    const isGreen = item.change >= 0;
+                    const borderCls = isGreen ? 'hover:border-emerald-600/60' : 'hover:border-rose-600/60';
+                    const bgGlow = isGreen ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-rose-500';
+
+                    return `
+                        <div onclick="selectStock('${item.symbol}')" class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 ${borderCls} ${bgGlow} rounded-lg p-2.5 cursor-pointer transition flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="bg-slate-900/80 px-2 py-1 rounded text-center min-w-[65px]">
+                                    <span class="font-bold text-white text-xs mono block">${item.symbol}</span>
+                                    <span class="text-[9px] text-slate-400 font-mono block">Lot: ${item.lot}</span>
+                                </div>
+                                <div class="truncate max-w-[200px] sm:max-w-[260px]">
+                                    <span class="text-xs font-medium text-slate-200 block truncate">${item.name}</span>
+                                    <span class="text-[10px] text-slate-500">Click to calculate Option Plan</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs font-semibold text-white mono block">₹${item.price}</span>
+                                <span class="text-xs font-mono font-bold ${isGreen ? 'text-emerald-400' : 'text-rose-400'}">
+                                    ${isGreen ? '▲ +' : '▼ '}${item.change}%
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                container.innerHTML = `<div class="text-xs text-rose-400 text-center py-4">Error loading sector stocks</div>`;
+            }
+        }
+
+        function selectStock(sym) {
+            document.getElementById('symbolInput').value = sym;
+            calculatePlan('LONG');
+        }
+
+        function toggleSettingsModal() {
+            const m = document.getElementById('settingsModal');
+            m.classList.toggle('hidden');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

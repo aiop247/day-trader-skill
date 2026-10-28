@@ -61,6 +61,13 @@ import time
 import urllib.error
 import urllib.request
 
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 UA = "Mozilla/5.0 (compatible; day-trader-skill/2.0; +https://github.com/Jakeschincariol/day-trader-skill)"
 PAUSE = 0.5      # seconds between requests to the free endpoint
 BACKOFF = 5.0    # seconds before the one retry after an HTTP 429
@@ -103,9 +110,60 @@ OPEN = datetime.time(9, 30)
 CLOSE = datetime.time(16, 0)
 EARLY = datetime.time(13, 0)
 
+NSE_HOLIDAYS = {
+    "2026-01-26": "Republic Day",
+    "2026-02-17": "Mahashivratri",
+    "2026-03-03": "Holi",
+    "2026-03-20": "Id-Ul-Fitr (Ramzan Id)",
+    "2026-03-27": "Ram Navami",
+    "2026-03-31": "Mahavir Jayanti",
+    "2026-04-03": "Good Friday",
+    "2026-04-14": "Dr. Baba Saheb Ambedkar Jayanti",
+    "2026-05-01": "Maharashtra Day",
+    "2026-05-27": "Bakri Id (Id-Ul-Adha)",
+    "2026-06-26": "Muharram",
+    "2026-08-15": "Independence Day",
+    "2026-10-02": "Mahatma Gandhi Jayanti",
+    "2026-10-20": "Dussehra",
+    "2026-11-08": "Diwali Laxmi Pujan (Muhurat)",
+    "2026-11-24": "Prakash Gurpurb (Guru Nanak Jayanti)",
+    "2026-12-25": "Christmas Day",
+    "2027-01-26": "Republic Day",
+    "2027-03-08": "Mahashivratri",
+    "2027-03-22": "Holi",
+    "2027-03-26": "Good Friday",
+    "2027-04-14": "Dr. Ambedkar Jayanti",
+    "2027-05-01": "Maharashtra Day",
+    "2027-08-15": "Independence Day",
+    "2027-10-02": "Mahatma Gandhi Jayanti",
+    "2027-12-25": "Christmas Day",
+}
+NSE_OPEN = datetime.time(9, 15)
+NSE_CLOSE = datetime.time(15, 30)
+
 
 class EntryError(Exception):
     pass
+
+
+def is_nse_market(sym=None, cfg=None):
+    if cfg and str(cfg.get("market") or "").upper() in ("NSE", "BSE", "INDIA", "IN"):
+        return True
+    if sym and str(sym).upper().endswith((".NS", ".BO")):
+        return True
+    return False
+
+
+def curr(sym=None):
+    return "₹" if is_nse_market(sym) else "$"
+
+
+def to_ist(utc):
+    return utc.replace(tzinfo=None) + datetime.timedelta(hours=5, minutes=30)
+
+
+def ist_to_utc(local):
+    return local - datetime.timedelta(hours=5, minutes=30)
 
 
 # ---------------------------------------------------------------- time
@@ -198,29 +256,37 @@ def ampm(t):
     return "%d:%02d %s" % (h, t.minute, "AM" if t.hour < 12 else "PM")
 
 
-def trading_day(d):
-    """(is_trading_day, reason). Weekends and the NYSE holiday list."""
+def trading_day(d, sym=None):
+    """(is_trading_day, reason). Weekends and the NYSE / NSE holiday list."""
     if d.weekday() >= 5:
         return False, "weekend"
+    if is_nse_market(sym):
+        name = NSE_HOLIDAYS.get(d.isoformat())
+        if name:
+            return False, "NSE holiday: " + name
+        return True, ""
     name = NYSE_HOLIDAYS.get(d.isoformat())
     if name:
         return False, "NYSE holiday: " + name
     return True, ""
 
 
-def session(d):
-    """(open_time, close_time) in New York time, or None if closed all day."""
-    ok, _ = trading_day(d)
+def session(d, sym=None):
+    """(open_time, close_time) in local time, or None if closed all day."""
+    ok, _ = trading_day(d, sym)
     if not ok:
         return None
+    if is_nse_market(sym):
+        return NSE_OPEN, NSE_CLOSE
     return OPEN, (EARLY if d.isoformat() in NYSE_EARLY_CLOSE else CLOSE)
 
 
-def next_open(d):
+def next_open(d, sym=None):
     nd = d + datetime.timedelta(days=1)
+    op_str = "09:15" if is_nse_market(sym) else "09:30"
     for _ in range(15):
-        if session(nd):
-            return "%s 09:30" % nd.isoformat()
+        if session(nd, sym):
+            return "%s %s" % (nd.isoformat(), op_str)
         nd += datetime.timedelta(days=1)
     return None
 
@@ -228,7 +294,11 @@ def next_open(d):
 # ---------------------------------------------------------------- Yahoo
 
 def yahoo_symbol(sym):
-    return sym.upper().replace(".", "-")
+    s = sym.upper()
+    if s.endswith((".NS", ".BO")):
+        base, ext = s.rsplit(".", 1)
+        return base.replace(".", "-") + "." + ext
+    return s.replace(".", "-")
 
 
 def chart_path(sym, rng, interval):
@@ -361,7 +431,7 @@ def get_chart(sym, interval, day=None, offline=None, today=None):
         except (OSError, ValueError) as e:
             raise EntryError("could not read %s: %s" % (f, e))
     else:
-        today = today or to_eastern(utc_now()).date()
+        today = today or ((to_ist(utc_now()) if is_nse_market(sym) else to_eastern(utc_now())).date())
         text = yahoo_get(chart_path(sym, chart_range(day or today, today, interval), interval))
     ch = parse_chart(text, sym)
     if ch["symbol"] != yahoo_symbol(sym):
@@ -382,9 +452,15 @@ def read_config(path):
                 doc = json.load(fh)
         except ValueError as e:
             raise EntryError("%s is not valid JSON: %s" % (path, e))
+        if is_nse_market(cfg=doc):
+            cfg["no_entries_before"] = "09:30"
+            cfg["no_entries_after"] = "15:00"
         for k in DEFAULTS:
             if doc.get(k):
                 cfg[k] = doc[k]
+        for k, v in doc.items():
+            if k not in cfg:
+                cfg[k] = v
     for k in DEFAULTS:
         parse_hhmm(cfg[k], k)
     return cfg
@@ -419,7 +495,9 @@ def evaluate(chart, now_utc, setup="orb", or_minutes=15, interval="5m", level=No
     if setup == "level" and level is None:
         raise EntryError("--setup level needs --level PRICE (for example a 20-day high)")
     n_or = or_minutes * 60 // step
-    local = to_eastern(now_utc)
+    sym = chart.get("symbol", "")
+    is_nse = is_nse_market(sym, cfg)
+    local = to_ist(now_utc) if is_nse else to_eastern(now_utc)
     day = local.date()
     res = {"symbol": chart["symbol"], "setup": setup, "side": "buy", "date": day.isoformat(),
            "interval": interval, "or_minutes": or_minutes, "now": local.strftime("%Y-%m-%d %H:%M:%S"), "status": "waiting",
@@ -427,27 +505,30 @@ def evaluate(chart, now_utc, setup="orb", or_minutes=15, interval="5m", level=No
            "last": None, "forming": None, "min_volume_x": min_volume_x,
            "prev_close": chart.get("prev_close"), "calendar_known": day.year in CALENDAR_YEARS, "_bars": []}
     dt = chart.get("data_time")
-    res["data_time"] = to_eastern(utc_of(dt)).strftime("%Y-%m-%d %H:%M:%S") if dt else None
-    ok, why = trading_day(day)
+    res["data_time"] = (to_ist(utc_of(dt)) if is_nse else to_eastern(utc_of(dt))).strftime("%Y-%m-%d %H:%M:%S") if dt else None
+    ok, why = trading_day(day, sym)
     if not ok:
-        res.update(status="no-data", phase="closed", reason="the NYSE is closed today (%s)" % why,
-                   next_open=next_open(day))
+        mkt_name = "NSE" if is_nse else "NYSE"
+        res.update(status="no-data", phase="closed", reason="the %s is closed today (%s)" % (mkt_name, why),
+                   next_open=next_open(day, sym))
         return res
-    o, c = session(day)
+    o, c = session(day, sym)
     open_dt = datetime.datetime.combine(day, o)
     close_dt = datetime.datetime.combine(day, c)
-    early = c != CLOSE
-    before = datetime.datetime.combine(day, parse_hhmm(cfg["no_entries_before"], "no_entries_before"))
-    cutoff = early_cutoff(day, parse_hhmm(cfg["no_entries_after"], "no_entries_after"), close_dt)
+    early = c != (NSE_CLOSE if is_nse else CLOSE)
+    def_before = "09:30" if is_nse else "09:45"
+    def_after = "15:00" if is_nse else "15:30"
+    before = datetime.datetime.combine(day, parse_hhmm(cfg.get("no_entries_before") or def_before, "no_entries_before"))
+    cutoff = early_cutoff(day, parse_hhmm(cfg.get("no_entries_after") or def_after, "no_entries_after"), close_dt)
     or_end = open_dt + datetime.timedelta(minutes=or_minutes)
-    res.update(opens=hm(o), closes=hm(c), early_close=NYSE_EARLY_CLOSE.get(day.isoformat()),
+    res.update(opens=hm(o), closes=hm(c), early_close=NSE_HOLIDAYS.get(day.isoformat()) if is_nse else NYSE_EARLY_CLOSE.get(day.isoformat()),
                no_entries_before=hm(before), no_entries_after=hm(cutoff))
 
     by_slot = {}
     for b in chart["bars"]:
         if b["t"] % step:
             continue                       # Yahoo's live tick (10:49:45) is not a bar
-        et = to_eastern(utc_of(b["t"]))
+        et = to_ist(utc_of(b["t"])) if is_nse else to_eastern(utc_of(b["t"]))
         if et.date() != day or not (open_dt <= et < close_dt):
             continue
         slot = int((et - open_dt).total_seconds()) // step
@@ -586,17 +667,21 @@ SHORT = {"pre-open": "not open", "forming": "forming", "closed": "closed"}
 
 
 def setup_name(res):
+    c = curr(res.get("symbol"))
     if res["setup"] == "orb":
         return "opening-range breakout (%d-minute range)" % res["or_minutes"]
-    return "close above $%.2f" % res["level"] if res["level"] is not None else "close above a level"
+    return "close above %s%.2f" % (c, res["level"]) if res["level"] is not None else "close above a level"
 
 
 def describe(res):
     """Plain lines for a person."""
+    sym = res.get("symbol", "")
+    c = curr(sym)
+    tz = "IST" if is_nse_market(sym) else "ET"
     when = datetime.datetime.strptime(res["now"], "%Y-%m-%d %H:%M:%S")
     bars = "5-minute" if res["interval"] == "5m" else "1-minute"
-    head = "%s  %s %s ET  %s on %s bars (Yahoo, free, can lag)" % (
-        res["symbol"], when.strftime("%a %Y-%m-%d"), when.strftime("%H:%M"), setup_name(res), bars)
+    head = "%s  %s %s %s  %s on %s bars (Yahoo, free, can lag)" % (
+        res["symbol"], when.strftime("%a %Y-%m-%d"), when.strftime("%H:%M"), tz, setup_name(res), bars)
     if res.get("data_time") and res["data_time"] <= res["now"] and res["data_time"][:10] == res["date"]:
         head += ", data to %s" % res["data_time"][11:]
     out = [head]
@@ -604,21 +689,21 @@ def describe(res):
     if orr:
         start = datetime.datetime.strptime(res["opens"], "%H:%M")
         end = start + datetime.timedelta(minutes=orr["minutes"])
-        out.append("Opening range %s-%s: high $%.2f, low $%.2f (%d of %d bars%s)." % (
-            short(start), short(end), orr["high"], orr["low"], orr["bars"], orr["of"],
+        out.append("Opening range %s-%s: high %s%.2f, low %s%.2f (%d of %d bars%s)." % (
+            short(start), short(end), c, orr["high"], c, orr["low"], orr["bars"], orr["of"],
             "" if orr["complete"] else ", still forming"))
     label = PHASE_LABEL.get(res["phase"]) or LABEL.get(res["status"], res["status"].upper())
     t = res.get("trigger")
     if t:
-        out.append("TRIGGERED %s at $%.2f: the %s bar (bar %d) closed above %s $%.2f (%+.2f%%%s)." % (
-            t["time"], t["price"], short(datetime.datetime.strptime(t["bar_start"], "%H:%M")), t["bar_index"],
-            "the range high" if res["setup"] == "orb" else "the level", res["level"], t["pct_over"],
+        out.append("TRIGGERED %s at %s%.2f: the %s bar (bar %d) closed above %s %s%.2f (%+.2f%%%s)." % (
+            t["time"], c, t["price"], short(datetime.datetime.strptime(t["bar_start"], "%H:%M")), t["bar_index"],
+            "the range high" if res["setup"] == "orb" else "the level", c, res["level"], t["pct_over"],
             (", %.2fx the range's volume" % t["volume_x"]) if res.get("min_volume_x") and t.get("volume_x") else ""))
         step = INTERVALS[res["interval"]] // 60
         if res.get("minutes_since", 0) > step and res.get("last"):
-            out.append("That was %d minutes ago; the last close is $%.2f (%s bar). A late entry is a different "
+            out.append("That was %d minutes ago; the last close is %s%.2f (%s bar). A late entry is a different "
                        "trade: the price, the stop distance and the odds have moved." % (
-                           res["minutes_since"], res["last"]["close"], res["last"]["bar_start"]))
+                           res["minutes_since"], c, res["last"]["close"], res["last"]["bar_start"]))
         if res.get("data_note"):
             out.append(res["data_note"] + ".")
         if res.get("minutes_since", 0) > step:
@@ -633,12 +718,12 @@ def describe(res):
         if res.get("lag_note") and res["status"] == "waiting":
             out.append(res["lag_note"] + ".")
         elif f and res["status"] == "waiting" and res["phase"] in ("open", "forming"):
-            out.append("The %s bar is still forming ($%.2f so far, closes %s); it does not count until it closes." % (
-                f["bar_start"].lstrip("0"), f["price"], f["closes"]))
+            out.append("The %s bar is still forming (%s%.2f so far, closes %s); it does not count until it closes." % (
+                f["bar_start"].lstrip("0"), c, f["price"], f["closes"]))
         if res["status"] == "expired":
             out.append("No entry on this setup today. Nothing was placed.")
         if res.get("next_open"):
-            out.append("Next open: %s New York." % res["next_open"])
+            out.append("Next open: %s%s." % (res["next_open"], "" if is_nse_market(sym) else " New York"))
     if res.get("early_close"):
         out.append("Early close today at 1:00 p.m. (%s): no new entries after %s." % (
             res["early_close"], res["no_entries_after"]))
