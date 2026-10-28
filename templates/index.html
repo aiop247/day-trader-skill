@@ -33,10 +33,10 @@
         </div>
 
         <div class="flex items-center space-x-4">
-            <div class="flex items-center bg-slate-800/80 rounded-lg px-3 py-1.5 border border-slate-700 text-xs">
-                <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-2"></span>
-                <span class="text-slate-300">NSE Market Hours:</span>
-                <span class="ml-1 font-semibold text-white">09:15 - 15:30 IST</span>
+            <div id="marketStatusBadge" class="flex items-center bg-slate-800/80 rounded-lg px-3 py-1.5 border border-slate-700 text-xs">
+                <span id="marketStatusDot" class="inline-block w-2 h-2 rounded-full bg-slate-500 mr-2"></span>
+                <span class="text-slate-300">NSE Market:</span>
+                <span id="marketStatusText" class="ml-1 font-semibold text-slate-400">Checking...</span>
             </div>
             <button onclick="toggleSettingsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition">
                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -466,10 +466,43 @@
         let currentSector = "Banking";
 
         async function init() {
+            updateMarketStatus();
+            setInterval(updateMarketStatus, 30000); // Check every 30s
             await loadFnoMaster();
             await loadConfig();
             renderPositions();
             await loadSectors();
+        }
+
+        function updateMarketStatus() {
+            // Convert to Indian Standard Time (IST)
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const ist = new Date(utc + (3600000 * 5.5));
+            
+            const day = ist.getDay(); // 0 is Sunday, 6 is Saturday
+            const hours = ist.getHours();
+            const minutes = ist.getMinutes();
+            const totalMins = hours * 60 + minutes;
+
+            const openMins = 9 * 60 + 15;  // 09:15
+            const closeMins = 15 * 60 + 30; // 15:30
+
+            const dot = document.getElementById('marketStatusDot');
+            const txt = document.getElementById('marketStatusText');
+
+            const isWeekday = day >= 1 && day <= 5;
+            const isOpen = isWeekday && totalMins >= openMins && totalMins <= closeMins;
+
+            if (isOpen) {
+                dot.className = "inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-2";
+                txt.className = "ml-1 font-semibold text-emerald-400";
+                txt.innerText = "OPEN (09:15 - 15:30 IST)";
+            } else {
+                dot.className = "inline-block w-2 h-2 rounded-full bg-rose-500 mr-2";
+                txt.className = "ml-1 font-semibold text-rose-400";
+                txt.innerText = "CLOSED (Opens 09:15 IST)";
+            }
         }
 
         async function loadSectors() {
