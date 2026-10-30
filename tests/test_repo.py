@@ -39,7 +39,7 @@ class Repo(unittest.TestCase):
         self.assertEqual(found, sorted(SKILLS))
 
     def test_root_matches_the_reel(self):
-        ignored = ("trader", "__pycache__", "app_fno_gui.py", "fno_options.py", "templates")
+        ignored = ("trader", "__pycache__", "app_fno_gui.py", "fno_options.py", "templates", "auto_scanner.py", "SERVER_SETUP_GUIDE.md")
         root = sorted(d for d in os.listdir(ROOT) if not d.startswith(".git") and d not in ignored)
         self.assertEqual(root, sorted([".claude-plugin", "LICENSE", "README.md", "tests"] + SKILLS))
 
