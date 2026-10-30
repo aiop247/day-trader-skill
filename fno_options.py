@@ -253,6 +253,28 @@ def plan_option_buy(
     }
 
 
+def send_telegram_raw(token: str, chat_id: str, markdown_text: str) -> Tuple[bool, str]:
+    """Sends arbitrary markdown text to Telegram."""
+    if not token or not chat_id:
+        return False, "Telegram Bot Token or Chat ID not configured."
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = json.dumps({"chat_id": chat_id, "text": markdown_text, "parse_mode": "Markdown"}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            if res.get("ok"):
+                return True, "Message sent successfully!"
+            return False, str(res)
+    except Exception as e:
+        return False, f"Telegram API error: {e}"
+
+
 def send_telegram_alert(token: str, chat_id: str, plan: dict) -> Tuple[bool, str]:
     """Sends a formatted Option Buying trade signal to Telegram."""
     if not token or not chat_id:
@@ -280,19 +302,4 @@ def send_telegram_alert(token: str, chat_id: str, plan: dict) -> Tuple[bool, str
         f"⏰ *Square-Off*: {plan['flat_by']}\n"
     )
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    try:
-        import ssl
-        # Disable strict SSL verification on remote/corporate servers with self-signed proxies
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
-            res = json.loads(resp.read().decode("utf-8"))
-            if res.get("ok"):
-                return True, "Alert sent successfully!"
-            return False, str(res)
-    except Exception as e:
-        return False, f"Telegram API error: {e}"
+    return send_telegram_raw(token, chat_id, msg)
