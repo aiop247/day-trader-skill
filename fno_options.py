@@ -155,6 +155,50 @@ def fetch_nse_fno_master(force_refresh: bool = False) -> Dict[str, Dict[str, any
     return FALLBACK_FNO
 
 
+def get_current_fno_expiry(ref_dt: Optional[datetime.datetime] = None) -> str:
+    """Calculates the upcoming NSE Stock F&O monthly expiry (last Thursday of month)."""
+    import datetime
+    if ref_dt is None:
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        ref_dt = utc_now + datetime.timedelta(hours=5, minutes=30)
+
+    year = ref_dt.year
+    month = ref_dt.month
+
+    # Last day of current month
+    if month == 12:
+        last_day = datetime.datetime(year + 1, 1, 1) - datetime.timedelta(days=1)
+    else:
+        last_day = datetime.datetime(year, month + 1, 1) - datetime.timedelta(days=1)
+
+    # Thursday is weekday 3
+    offset = (last_day.weekday() - 3) % 7
+    expiry_dt = last_day - datetime.timedelta(days=offset)
+
+    # If today is past current month's expiry date, roll over to next month
+    if ref_dt.date() > expiry_dt.date():
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+        if month == 12:
+            last_day = datetime.datetime(year + 1, 1, 1) - datetime.timedelta(days=1)
+        else:
+            last_day = datetime.datetime(year, month + 1, 1) - datetime.timedelta(days=1)
+        offset = (last_day.weekday() - 3) % 7
+        expiry_dt = last_day - datetime.timedelta(days=offset)
+
+    return expiry_dt.strftime("%d-%b-%Y").upper()
+
+
+def get_current_ist_timestamp() -> str:
+    """Returns current date and time formatted in IST."""
+    import datetime
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
+    return ist_now.strftime("%d-%b-%Y %I:%M:%S %p IST")
+
+
 def get_strike_step(price: float) -> float:
     """Calculates standard NSE stock option strike interval based on underlying price."""
     if price < 100:
@@ -226,6 +270,9 @@ def plan_option_buy(
 
     contract_name = f"{clean_sym} {int(atm_strike) if atm_strike.is_integer() else atm_strike} {opt_type}"
 
+    expiry_date = get_current_fno_expiry()
+    generated_at = get_current_ist_timestamp()
+
     return {
         "symbol": clean_sym,
         "company": lot_info.get("name", clean_sym),
@@ -234,6 +281,8 @@ def plan_option_buy(
         "opt_type": opt_type,
         "strike": atm_strike,
         "contract": contract_name,
+        "expiry": expiry_date,
+        "generated_at": generated_at,
         "lot_size": lot_size,
         "lots": lots,
         "total_qty": total_qty,
@@ -281,6 +330,8 @@ def send_telegram_alert(token: str, chat_id: str, plan: dict) -> Tuple[bool, str
         return False, "Telegram Bot Token or Chat ID not configured."
 
     direction_emoji = "🟢 🚀" if "CALL" in plan["direction"] else "🔴 📉"
+    expiry_str = plan.get("expiry", get_current_fno_expiry())
+    generated_time = plan.get("generated_at", get_current_ist_timestamp())
     
     msg = (
         f"{direction_emoji} *NSE STOCK OPTION SIGNAL*\n"
@@ -289,6 +340,8 @@ def send_telegram_alert(token: str, chat_id: str, plan: dict) -> Tuple[bool, str
         f"🏢 *Company*: {plan['company']}\n"
         f"📊 *Action*: *{plan['direction']}*\n"
         f"📈 *Stock LTP*: ₹{plan['stock_price']}\n"
+        f"📅 *Expiry Date*: `{expiry_str}`\n"
+        f"⏰ *Signal Time*: {generated_time}\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"💰 *Entry Premium*: ~₹{plan['est_premium']}\n"
         f"🛑 *Stop Loss*: ₹{plan['sl_price']} (-₹{plan['sl_points']})\n"
