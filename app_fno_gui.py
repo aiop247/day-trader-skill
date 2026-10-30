@@ -120,21 +120,22 @@ def api_position_alert(req: PositionAlertRequest):
         return {"success": False, "message": "Telegram Bot Token or Chat ID not configured."}
 
     is_tp = req.event_type.upper() == "TARGET"
-    icon = "🎯 🏆" if is_tp else "🛑 ⚠️"
+    icon = "🎯 🟢" if is_tp else "🛑 🔴"
     title = "TARGET HIT (PROFIT BOOKED)" if is_tp else "STOP LOSS HIT (CUT LOSS)"
     pnl_sign = "+" if req.pnl >= 0 else ""
-    pnl_color = "🟢" if req.pnl >= 0 else "🔴"
+    pnl_badge = "🟩 *PROFIT*" if req.pnl >= 0 else "🟥 *LOSS*"
+    status_header = "🟢 *TARGET ACHIEVED*" if is_tp else "🔴 *STOP LOSS TRIGGERED*"
 
     msg = (
-        f"{icon} *PAPER TRADE {title}*\n"
+        f"{icon} *PAPER TRADE: {status_header}*\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 *Contract*: `{req.contract}`\n"
         f"🔢 *Quantity*: {req.lots} Lot ({req.total_qty} Qty)\n"
         f"💰 *Entry Premium*: ₹{req.entry_premium}\n"
         f"⚡ *Exit Premium*: ₹{req.exit_premium}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{pnl_color} *Realized P&L*: *{pnl_sign}₹{req.pnl:,.2f}*\n"
-        f"⏰ *Time*: {fno_options.load_config().get('flat_by', '15:15 IST')}\n"
+        f"{pnl_badge}: *{pnl_sign}₹{req.pnl:,.2f}*\n"
+        f"⏰ *Exit Time*: {fno_options.get_current_ist_timestamp()}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Trade closed and logged automatically."
     )
