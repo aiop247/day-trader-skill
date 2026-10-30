@@ -100,6 +100,49 @@ def api_plan_option(
     return plan
 
 
+class PositionAlertRequest(BaseModel):
+    contract: str
+    event_type: str  # "TARGET" or "STOP_LOSS"
+    entry_premium: float
+    exit_premium: float
+    pnl: float
+    lots: int
+    total_qty: int
+
+
+@app.post("/api/position-alert")
+def api_position_alert(req: PositionAlertRequest):
+    cfg = fno_options.load_config()
+    token = cfg.get("telegram_token", "")
+    chat_id = cfg.get("telegram_chat_id", "")
+    
+    if not token or not chat_id:
+        return {"success": False, "message": "Telegram Bot Token or Chat ID not configured."}
+
+    is_tp = req.event_type.upper() == "TARGET"
+    icon = "🎯 🏆" if is_tp else "🛑 ⚠️"
+    title = "TARGET HIT (PROFIT BOOKED)" if is_tp else "STOP LOSS HIT (CUT LOSS)"
+    pnl_sign = "+" if req.pnl >= 0 else ""
+    pnl_color = "🟢" if req.pnl >= 0 else "🔴"
+
+    msg = (
+        f"{icon} *PAPER TRADE {title}*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📦 *Contract*: `{req.contract}`\n"
+        f"🔢 *Quantity*: {req.lots} Lot ({req.total_qty} Qty)\n"
+        f"💰 *Entry Premium*: ₹{req.entry_premium}\n"
+        f"⚡ *Exit Premium*: ₹{req.exit_premium}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{pnl_color} *Realized P&L*: *{pnl_sign}₹{req.pnl:,.2f}*\n"
+        f"⏰ *Time*: {fno_options.load_config().get('flat_by', '15:15 IST')}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Trade closed and logged automatically."
+    )
+
+    success, err_msg = fno_options.send_telegram_raw(token, chat_id, msg)
+    return {"success": success, "message": err_msg}
+
+
 @app.post("/api/send-telegram")
 def api_send_telegram(plan: dict):
     cfg = fno_options.load_config()

@@ -159,11 +159,23 @@
         <!-- Active Positions / Paper Trade Log -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>Active Paper Positions</span>
-                    <span id="activePositionsCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">0 Trades</span>
-                </h2>
-                <span class="text-xs text-slate-500 font-mono">Square-off: 15:15 IST</span>
+                <div class="flex items-center gap-3">
+                    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <span>Active Paper Positions</span>
+                        <span id="activePositionsCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">0 Trades</span>
+                    </h2>
+                    <span id="paperTrackerStatus" class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Live SL/TP Auto-Monitor Active
+                    </span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-slate-400 font-mono">Square-off: 15:15 IST</span>
+                    <button onclick="updateAllPaperPositions(true)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs border border-slate-700 flex items-center gap-1 transition">
+                        <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Refresh P&L
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto">
@@ -174,15 +186,17 @@
                             <th class="p-3">Type</th>
                             <th class="p-3">Qty (Lots)</th>
                             <th class="p-3">Entry Premium</th>
+                            <th class="p-3">Live Premium</th>
+                            <th class="p-3">Live P&L (₹)</th>
                             <th class="p-3">Stop Loss</th>
-                            <th class="p-3">Target</th>
-                            <th class="p-3">Max Risk</th>
+                            <th class="p-3">Target (1:2)</th>
+                            <th class="p-3">Status</th>
                             <th class="p-3 text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody id="positionsTableBody" class="divide-y divide-slate-800">
                         <tr>
-                            <td colspan="8" class="p-6 text-center text-slate-600">No active positions open.</td>
+                            <td colspan="10" class="p-6 text-center text-slate-600">No active positions open.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -424,11 +438,16 @@
             positions.push({
                 ...currentPlan,
                 id: Date.now(),
+                entry_stock_price: currentPlan.stock_price,
+                current_stock_price: currentPlan.stock_price,
+                live_premium: currentPlan.est_premium,
+                live_pnl: 0.0,
+                status: 'OPEN', // 'OPEN', 'TARGET_HIT', 'SL_HIT'
                 timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
             });
             localStorage.setItem('fno_positions', JSON.stringify(positions));
             renderPositions();
-            alert(`Paper trade added: ${currentPlan.contract}`);
+            alert(`Paper trade placed: ${currentPlan.contract}\nMonitoring live SL (₹${currentPlan.sl_price}) & TP (₹${currentPlan.target_price}).`);
         }
 
         function removePosition(id) {
@@ -437,30 +456,123 @@
             renderPositions();
         }
 
+        async function updateAllPaperPositions(manual = false) {
+            if (positions.length === 0) return;
+            let updated = false;
+
+            for (let i = 0; i < positions.length; i++) {
+                const p = positions[i];
+                if (p.status !== 'OPEN') continue;
+
+                try {
+                    // Fetch latest underlying stock price
+                    const res = await fetch(`/api/plan-option?symbol=${encodeURIComponent(p.symbol)}&direction=${p.opt_type === 'CE' ? 'LONG' : 'SHORT'}`);
+                    if (!res.ok) continue;
+                    const latest = await res.json();
+                    
+                    const newStockPrice = latest.stock_price;
+                    const priceDiff = newStockPrice - p.entry_stock_price;
+
+                    // Option Delta estimate (~0.50 for ATM)
+                    const delta = 0.50;
+                    let premiumDelta = 0;
+                    if (p.opt_type === 'CE') {
+                        premiumDelta = priceDiff * delta;
+                    } else {
+                        premiumDelta = -priceDiff * delta;
+                    }
+
+                    let curPremium = Math.max(0.5, Math.round((p.est_premium + premiumDelta) * 100) / 100);
+                    let pnl = Math.round((curPremium - p.est_premium) * p.total_qty);
+
+                    p.live_premium = curPremium;
+                    p.live_pnl = pnl;
+                    p.current_stock_price = newStockPrice;
+                    updated = true;
+
+                    // Check if Target hit
+                    if (curPremium >= p.target_price) {
+                        p.status = 'TARGET_HIT';
+                        p.exit_premium = curPremium;
+                        await notifyPositionTrigger(p, 'TARGET');
+                    }
+                    // Check if Stop Loss hit
+                    else if (curPremium <= p.sl_price) {
+                        p.status = 'SL_HIT';
+                        p.exit_premium = curPremium;
+                        await notifyPositionTrigger(p, 'STOP_LOSS');
+                    }
+                } catch (err) {
+                    console.error('Error updating paper position', err);
+                }
+            }
+
+            if (updated) {
+                localStorage.setItem('fno_positions', JSON.stringify(positions));
+                renderPositions();
+            }
+        }
+
+        async function notifyPositionTrigger(p, eventType) {
+            try {
+                await fetch('/api/position-alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract: p.contract,
+                        event_type: eventType,
+                        entry_premium: p.est_premium,
+                        exit_premium: p.live_premium,
+                        pnl: p.live_pnl,
+                        lots: p.lots,
+                        total_qty: p.total_qty
+                    })
+                });
+            } catch (err) {
+                console.error('Failed to dispatch position trigger alert', err);
+            }
+        }
+
         function renderPositions() {
             document.getElementById('activePositionsCount').innerText = `${positions.length} Trades`;
             const tbody = document.getElementById('positionsTableBody');
             if (positions.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-600">No active positions open.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-600">No active positions open.</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = positions.map(p => `
-                <tr class="hover:bg-slate-800/40 transition">
-                    <td class="p-3 font-semibold text-white mono">${p.contract}</td>
-                    <td class="p-3">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.opt_type === 'CE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.opt_type}</span>
-                    </td>
-                    <td class="p-3 text-slate-300 mono">${p.total_qty} (${p.lots}L)</td>
-                    <td class="p-3 font-semibold text-white mono">₹${p.est_premium}</td>
-                    <td class="p-3 font-semibold text-rose-400 mono">₹${p.sl_price}</td>
-                    <td class="p-3 font-semibold text-emerald-400 mono">₹${p.target_price}</td>
-                    <td class="p-3 text-slate-400 mono">₹${p.total_risk.toLocaleString()}</td>
-                    <td class="p-3 text-right">
-                        <button onclick="removePosition(${p.id})" class="text-rose-400 hover:text-rose-300 font-medium text-xs">Close</button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = positions.map(p => {
+                const livePremium = p.live_premium || p.est_premium;
+                const pnl = p.live_pnl || 0;
+                const pnlColor = pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+                const pnlSign = pnl >= 0 ? '+' : '';
+
+                let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">LIVE</span>';
+                if (p.status === 'TARGET_HIT') {
+                    statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 animate-pulse">🎯 TARGET HIT</span>';
+                } else if (p.status === 'SL_HIT') {
+                    statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/30 text-rose-300 border border-rose-500/50">🛑 SL HIT</span>';
+                }
+
+                return `
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="p-3 font-semibold text-white mono">${p.contract}</td>
+                        <td class="p-3">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.opt_type === 'CE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.opt_type}</span>
+                        </td>
+                        <td class="p-3 text-slate-300 mono">${p.total_qty} (${p.lots}L)</td>
+                        <td class="p-3 font-semibold text-white mono">₹${p.est_premium}</td>
+                        <td class="p-3 font-bold text-white mono bg-slate-800/40">₹${livePremium}</td>
+                        <td class="p-3 mono ${pnlColor}">${pnlSign}₹${pnl.toLocaleString()}</td>
+                        <td class="p-3 font-semibold text-rose-400 mono">₹${p.sl_price}</td>
+                        <td class="p-3 font-semibold text-emerald-400 mono">₹${p.target_price}</td>
+                        <td class="p-3">${statusBadge}</td>
+                        <td class="p-3 text-right">
+                            <button onclick="removePosition(${p.id})" class="text-rose-400 hover:text-rose-300 font-medium text-xs">Close</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         let currentSector = "Banking";
@@ -472,6 +584,10 @@
             await loadConfig();
             renderPositions();
             await loadSectors();
+
+            // Auto-update Paper Trades prices & monitor SL/TP every 15 seconds
+            setInterval(updateAllPaperPositions, 15000);
+            updateAllPaperPositions();
         }
 
         function updateMarketStatus() {
